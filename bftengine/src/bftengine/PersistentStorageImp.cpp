@@ -13,6 +13,7 @@
 #include "PersistentStorageImp.hpp"
 #include "Logger.hpp"
 #include "bftengine/EpochManager.hpp"
+#include "db_checkpoint_metadata.hpp"
 #include <list>
 #include <sstream>
 #include <stdexcept>
@@ -93,6 +94,8 @@ ObjectDescUniquePtr PersistentStorageImp::getDefaultMetadataObjectDescriptors(ui
   metadataObjectsArray.get()[ERASE_METADATA_ON_STARTUP].maxSize = sizeof(bool);
   metadataObjectsArray.get()[USER_DATA].maxSize = kMaxUserDataSizeBytes;
   metadataObjectsArray.get()[START_NEW_EPOCH].maxSize = sizeof(bool);
+  metadataObjectsArray.get()[DB_CHECKPOINT_DESCRIPTOR].maxSize =
+      bftengine::dbcheckpoint_mdt::MAX_SIZE_REQUIRED_FOR_PERSISTENCE;
 
   for (auto i = 0; i < kWorkWindowSize; ++i) {
     metadataObjectsArray.get()[LAST_EXIT_FROM_VIEW_DESC + 1 + i].maxSize =
@@ -963,6 +966,22 @@ bool PersistentStorageImp::getNewEpochFlag() {
 }
 
 void PersistentStorageImp::eraseMetadata() { metadataStorage_->eraseData(); }
+
+void PersistentStorageImp::setDbCheckpointMetadata(const std::vector<std::uint8_t> &v) {
+  std::string data(v.begin(), v.end());
+  metadataStorage_->atomicWrite(DB_CHECKPOINT_DESCRIPTOR, data.data(), data.size());
+}
+std::optional<std::vector<std::uint8_t>> PersistentStorageImp::getDbCheckpointMetadata(const uint32_t &maxBuffSz) {
+  uint32_t outActualObjectSize = 0;
+  UniquePtrToChar outBuf(new char[maxBuffSz]);
+  char *outBufPtr = outBuf.get();
+  metadataStorage_->read(DB_CHECKPOINT_DESCRIPTOR, maxBuffSz, outBufPtr, outActualObjectSize);
+  if (!outActualObjectSize)  // Parameter not found
+    return std::nullopt;
+  std::vector<uint8_t> v(outActualObjectSize, 0);
+  for (auto i = 0u; i < outActualObjectSize; i++) v[i] = static_cast<uint8_t>(outBuf[i]);
+  return v;
+}
 
 }  // namespace impl
 }  // namespace bftEngine

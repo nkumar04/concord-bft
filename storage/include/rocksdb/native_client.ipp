@@ -277,6 +277,17 @@ inline Client::CfUniquePtr NativeClient::createColumnFamilyHandle(const std::str
   return ret;
 }
 
+inline void NativeClient::createCheckpointNative(const uint64_t &checkPointId) {
+  client_->createCheckpoint(checkPointId);
+}
+inline std::vector<uint64_t> NativeClient::getListOfCreatedCheckpointsNative() const {
+  return client_->getListOfCreatedCheckpoints();
+}
+
+inline void NativeClient::removeCheckpointNative(const uint64_t &checkPointId) const {
+  client_->removeCheckpoint(checkPointId);
+}
+
 }  // namespace concord::storage::rocksdb
 
 #endif  // USE_ROCKSDB

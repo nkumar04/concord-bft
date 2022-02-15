@@ -234,6 +234,8 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
 
   // digest to data-only preprepare msg map
   std::unordered_map<std::string, PrePrepareMsg*> hashToDataPPmap_;
+  uint64_t countDataPP_;
+  uint64_t countConPP_;
 
   //******** METRICS ************************************
   GaugeHandle metric_view_;

@@ -1131,11 +1131,13 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
     auto d = msg->digestOfRequests().toString();
     if (hashToDataPPmap_.find(d) == hashToDataPPmap_.end()) {
       hashToDataPPmap_[d] = msg->cloneDataPPMsg(msg);
+      countDataPP_++;
+      LOG_INFO(CNSUS, "received data PP message for : "<<KVLOG(msg->seqNumber(), countDataPP_));
     }
     return;
   }
   // in-case batch pp message was prepared async
-  if (msg->requestsSize() >= config_.threshBatchSizeForDataSeparation) {
+  if ((msg->requestsSize() >= config_.threshBatchSizeForDataSeparation) && msg->isLegacyPPMsg() && isCurrentPrimary()) {
     msg->setDataPPFlag();
     auto dataPP = msg->cloneDataPPMsg(msg);
     auto digest = msg->digestOfRequests().toString();
@@ -1201,6 +1203,8 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
         hashToDataPPmap_.erase(it);
         delete tempConsensusPP;
         tempConsensusPP = nullptr;
+        countConPP_++;
+        LOG_INFO(CNSUS, "received consensus PP message for : "<<KVLOG(msg->seqNumber(), countConPP_));
       } else {
         // RFMI
         delete msg;
@@ -1734,21 +1738,23 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
     return ticks_gen_->onInternalTick(*tick);
   }
   if (auto *t = std::get_if<ConsensusOnlyPPMsg>(&msg)) {
-    if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
-      PrePrepareMsg *dPP = it->second;
-      auto new_pp = dPP->createConsensusPPMsg(dPP);
-      if (new_pp) {
-        // add time service req
-        if (config_.timeServiceEnabled) {
-          auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
+   
+      if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
+        PrePrepareMsg *dPP = it->second;
+        auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
+        auto new_pp = dPP->createConsensusPPMsg(dPP, timeServiceMsg->size());
+        if (new_pp) {
+          // add time service req
           new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
+          new_pp->finishAddingRequests();
+          if (false == tryToSendConsensusPrePrepareMsg(new_pp))
+            LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
+          else
+            hashToDataPPmap_.erase(it);
         }
-        if (false == tryToSendConsensusPrePrepareMsg(new_pp))
-          LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
-        else
-          hashToDataPPmap_.erase(it);
       }
-    }
+    
+    return;
   }
   ConcordAssert(false);
 }
@@ -5234,10 +5240,10 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
   updateLimitsAndMetrics(ppMsg);
 
   tryToStartOrFinishExecution(false);
-
-  InternalMessage im = ConsensusOnlyPPMsg{""};
-
-  getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+  if (currentPrimary()){
+    InternalMessage im = ConsensusOnlyPPMsg{""};
+    getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+  }
 }
 
 void ReplicaImp::finalizeExecution() {

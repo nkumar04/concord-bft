@@ -81,7 +81,7 @@ class PrePrepareMsg : public MessageBase {
                 const std::string& batchCid,
                 size_t size);
 
-  PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp);
+  PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp, size_t size);
   PrePrepareMsg* cloneDataPPMsg(PrePrepareMsg* pp);
 
   BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(PrePrepareMsg)

@@ -105,7 +105,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
 
   CONFIG_PARAM(batchingPolicy, uint32_t, BATCH_SELF_ADJUSTED, "BFT consensus batching policy for requests");
   CONFIG_PARAM(batchFlushPeriod, uint32_t, 1000, "BFT consensus batching flush period");
-  CONFIG_PARAM(maxNumOfRequestsInBatch, uint32_t, 100, "Maximum number of requests in BFT consensus batch");
+  CONFIG_PARAM(maxNumOfRequestsInBatch, uint32_t, 1000, "Maximum number of requests in BFT consensus batch");
   CONFIG_PARAM(maxBatchSizeInBytes, uint32_t, 33554432, "Maximum size of all requests in BFT consensus batch");
   CONFIG_PARAM(maxInitialBatchSize,
                uint32_t,
@@ -120,7 +120,8 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
   CONFIG_PARAM(adaptiveBatchingMidIncCond, std::string, "0.9", "The mid increase condition");
   CONFIG_PARAM(adaptiveBatchingMinIncCond, std::string, "0.75", "The min increase condition");
   CONFIG_PARAM(adaptiveBatchingDecCond, std::string, "0.5", "The decrease condition");
-  CONFIG_PARAM(threshBatchSizeForDataSeparation, uint64_t, 1048576, "Threshold batch size(1MB) for data separation");
+  CONFIG_PARAM(threshBatchSizeForDataSeparation, uint64_t, 0, "Threshold batch size(1MB) for data separation");
+  CONFIG_PARAM(ppDataSeparationEnabled, bool, true, "Data separation enabled for PP msg");
 
   // Crypto system
   // RSA public keys of all replicas. map from replica identifier to a public key

@@ -11,12 +11,12 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 namespace bftEngine::impl {
-class PrePrepareMsg;
 struct ConsensusOnlyPPMsg {
-  PrePrepareMsg* prePrepareMsg = nullptr;
-  ConsensusOnlyPPMsg(PrePrepareMsg* pp) : prePrepareMsg{pp} {}
+  std::string additionalData = "";
+  ConsensusOnlyPPMsg(const std::string& d) : additionalData{d} {}
 };
 
 }  // namespace bftEngine::impl

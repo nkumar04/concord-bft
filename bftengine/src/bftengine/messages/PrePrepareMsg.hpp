@@ -135,6 +135,10 @@ class PrePrepareMsg : public MessageBase {
     const uint16_t flags = b()->flags;
     return (((flags >> 4) & 0x01) == 0x01);
   }
+  bool isLegacyPPMsg() const {
+    const uint16_t flags = b()->flags;
+    return ((flags >> 4) == 0);
+  }
 
  protected:
   static int16_t computeFlagsForPrePrepareMsg(bool isNull, bool isReady, CommitPath firstPath);

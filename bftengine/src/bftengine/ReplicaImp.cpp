@@ -681,16 +681,9 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
         new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
       }
       InternalMessage im = ConsensusOnlyPPMsg{new_pp};
-      // add a client request to it
+
       auto digestStr = pp->digestOfRequests().toString();
-      auto crm = new ClientRequestMsg(internalBFTClient_->getClientId(),
-                                      CONSENSUS_PP_FLAG,
-                                      new_pp->seqNumber(),
-                                      digestStr.size(),
-                                      digestStr.c_str(),
-                                      60000,
-                                      "consensus-pp-" + std::to_string(lastExecutedSeqNum + 1));
-      onMessage(crm);
+
       getIncomingMsgsStorage().pushInternalMsg(std::move(im));
       // Start data pp msg for consensus - no pre-check reqd
       startConsensusProcess(pp);
@@ -1005,7 +998,6 @@ PrePrepareMsg *ReplicaImp::getConsensusPPFromDataPP(PrePrepareMsg *pp) {
   auto digest = consensus_only_pp->digestOfRequests().toString();
   auto dataPP = pp->cloneDataPPMsg(pp);
   // TODO(NK): need to persist this
-  // TODO(NK): check and remove old data messages on stable seqNum
   hashToDataPPmap_.emplace(digest, dataPP);
   return consensus_only_pp;
 }
@@ -1174,6 +1166,21 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       if (msgSeqNum > maxSeqNumTransferredFromPrevViews /* not transferred from the previous view*/) {
         time_is_ok = time_service_manager_->isPrimarysTimeWithinBounds(*msg);
       }
+    }
+    PrePrepareMsg *tempConsensusPP = nullptr;
+    if (msg->isConsensusPPFlagSet()) {
+      // attach relevant data PP msg
+      const auto &dig = msg->digestOfRequests().toString();
+      if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
+        tempConsensusPP = msg;
+        msg = it->second;
+        msg->resetConsensusOnlyFlag();
+        hashToDataPPmap_.erase(it);
+        delete tempConsensusPP;
+        tempConsensusPP = nullptr;
+      }
+    } else {
+      // RFMI
     }
     // For MDC it doesn't matter which type of fast path
     SCOPED_MDC_PATH(CommitPathToMDCString(slowStarted ? CommitPath::SLOW : CommitPath::OPTIMISTIC_FAST));
@@ -3540,15 +3547,6 @@ void ReplicaImp::onSeqNumIsStable(SeqNum newStableSeqNum, bool hasStateInformati
     // If for some reason the previous checkpoint is not in the log, we advance the log to the current stable
     // checkpoint.
     checkpointsLog->advanceActiveWindow(lastStableSeqNum);
-  }
-
-  // remove data pp messages that are older
-  while (!hashToDataPPmap_.empty()) {
-    auto it = hashToDataPPmap_.begin();
-    if (it->second->seqNumber() >= (lastStableSeqNum - 2*kWorkWindowSize)) {
-      break;
-    }
-    hashToDataPPmap_.erase(it);
   }
 
   if (hasStateInformation) {

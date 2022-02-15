@@ -380,11 +380,9 @@ PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp) {
   newPP->setConsensusOnlyFlag();
   return newPP;
 }
-std::shared_ptr<PrePrepareMsg> PrePrepareMsg::cloneDataPPMsg(PrePrepareMsg* pp) {
-  auto clone_obj = std::shared_ptr<PrePrepareMsg>(nullptr);
+PrePrepareMsg* PrePrepareMsg::cloneDataPPMsg(PrePrepareMsg* pp) {
   PrePrepareMsg* cone_pp = (PrePrepareMsg*)pp->cloneObjAndMsg();
-  clone_obj.reset(cone_pp);
-  return clone_obj;
+  return cone_pp;
 }
 
 }  // namespace impl

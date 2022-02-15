@@ -82,7 +82,7 @@ class PrePrepareMsg : public MessageBase {
                 size_t size);
 
   PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp);
-  std::shared_ptr<PrePrepareMsg> cloneDataPPMsg(PrePrepareMsg* pp);
+  PrePrepareMsg* cloneDataPPMsg(PrePrepareMsg* pp);
 
   BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(PrePrepareMsg)
 
@@ -122,11 +122,19 @@ class PrePrepareMsg : public MessageBase {
   const std::string getBatchCorrelationIdAsString() const;
 
   void setDataPPFlag() { b()->flags |= 32; }
-  bool isDataPPFlagSet() {
+  bool isDataPPFlagSet() const {
     const uint16_t flags = b()->flags;
     return (((flags >> 4) & 0x10) == 0x10);
   }
   void setConsensusOnlyFlag() { b()->flags |= 16; }
+  void resetConsensusOnlyFlag() {
+    b()->flags &= ~(1 << 4);
+    b()->flags &= ~(1 << 5);
+  }
+  bool isConsensusPPFlagSet() const {
+    const uint16_t flags = b()->flags;
+    return (((flags >> 4) & 0x01) == 0x01);
+  }
 
  protected:
   static int16_t computeFlagsForPrePrepareMsg(bool isNull, bool isReady, CommitPath firstPath);

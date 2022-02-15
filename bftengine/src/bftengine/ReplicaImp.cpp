@@ -1177,9 +1177,9 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
         hashToDataPPmap_.erase(it);
         delete tempConsensusPP;
         tempConsensusPP = nullptr;
+      } else {
+        // RFMI
       }
-    } else {
-      // RFMI
     }
     // For MDC it doesn't matter which type of fast path
     SCOPED_MDC_PATH(CommitPathToMDCString(slowStarted ? CommitPath::SLOW : CommitPath::OPTIMISTIC_FAST));

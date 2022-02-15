@@ -122,6 +122,10 @@ class PrePrepareMsg : public MessageBase {
   const std::string getBatchCorrelationIdAsString() const;
 
   void setDataPPFlag() { b()->flags |= 32; }
+  bool isDataPPFlagSet() {
+    const uint16_t flags = b()->flags;
+    return (((flags >> 4) & 0x10) == 0x10);
+  }
   void setConsensusOnlyFlag() { b()->flags |= 16; }
 
  protected:

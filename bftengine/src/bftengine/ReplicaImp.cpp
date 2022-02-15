@@ -54,6 +54,7 @@
 #include "messages/ViewChangeIndicatorInternalMsg.hpp"
 #include "messages/PrePrepareCarrierInternalMsg.hpp"
 #include "messages/ValidatedMessageCarrierInternalMsg.hpp"
+#include "messages/ConsensusOnlyPPMsg.hpp"
 #include "messages/StateTransferMsg.hpp"
 #include "CryptoManager.hpp"
 #include "ControlHandler.hpp"
@@ -553,7 +554,7 @@ void ReplicaImp::onMessage<ReplicaAsksToLeaveViewMsg>(ReplicaAsksToLeaveViewMsg 
   }
 }
 
-bool ReplicaImp::checkSendPrePrepareMsgPrerequisites() {
+bool ReplicaImp::checkSendPrePrepareMsgPrerequisites(bool ignore_empty_prim_req_que) {
   if (!isCurrentPrimary()) {
     LOG_WARN(GL, "Called in a non-primary replica; won't send PrePrepareMsgs!");
     return false;
@@ -596,6 +597,7 @@ bool ReplicaImp::checkSendPrePrepareMsgPrerequisites() {
   ConcordAssertGE(primaryLastUsedSeqNum, lastExecutedSeqNum + activeExecutions_);
   // Because maxConcurrentAgreementsByPrimary <  MaxConcurrentFastPaths
   ConcordAssertLE((primaryLastUsedSeqNum + 1), lastExecutedSeqNum + MaxConcurrentFastPaths + activeExecutions_);
+  if (ignore_empty_prim_req_que) return true;
 
   if (requestsQueueOfPrimary.empty()) LOG_DEBUG(GL, "requestsQueueOfPrimary is empty");
 
@@ -646,6 +648,59 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMsgBatchByRequestsNu
 
   removeDuplicatedRequestsFromRequestsQueue();
   return buildPrePrepareMessageByRequestsNum(requiredRequestsNum);
+}
+
+bool ReplicaImp::tryToSendDataPrePrepareMsg() {
+  // no need to check for pre-requsites
+  removeDuplicatedRequestsFromRequestsQueue();
+  PrePrepareMsg *pp = nullptr;
+  bool isSent = false;
+
+  auto batchedReq = reqBatchingLogic_.batchRequests();
+  isSent = batchedReq.second;
+  if (isSent) {
+    pp = batchedReq.first;
+    batch_closed_on_logic_on_++;
+    accumulating_batch_time_.add(
+        std::chrono::duration_cast<std::chrono::microseconds>(getMonotonicTime() - time_to_collect_batch_).count());
+    accumulating_batch_avg_time_.Get().Set((uint64_t)accumulating_batch_time_.avg());
+    if (accumulating_batch_time_.numOfElements() == 1000) {
+      accumulating_batch_time_.reset();  // We reset the average on every 1000 samples
+    }
+    time_to_collect_batch_ = MinTime;
+  }
+
+  if (!pp) return isSent;
+  // check for data separation
+  if (pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) {
+    auto new_pp = getConsensusPPFromDataPP(pp);
+    if (new_pp) {
+      InternalMessage im = ConsensusOnlyPPMsg{new_pp};
+      // add a client request to it
+      auto digestStr = pp->digestOfRequests().toString();
+      auto crm = new ClientRequestMsg(internalBFTClient_->getClientId(),
+                                      CONSENSUS_PP_FLAG,
+                                      new_pp->seqNumber(),
+                                      digestStr.size(),
+                                      digestStr.c_str(),
+                                      60000,
+                                      "consensus-pp-" + std::to_string(lastExecutedSeqNum + 1));
+      onMessage(crm);
+      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+      // Start data pp msg for consensus - no pre-check reqd
+      startConsensusProcess(pp);
+      return true;
+    }
+  }
+
+  return false;
+}
+bool ReplicaImp::tryToSendConsensusPrePrepareMsg(PrePrepareMsg *pp) {
+  if (!checkSendPrePrepareMsgPrerequisites(true)) {
+    startConsensusProcess(pp);
+    return true;
+  }
+  return false;
 }
 
 bool ReplicaImp::tryToSendPrePrepareMsg(bool batchingLogic) {
@@ -935,6 +990,19 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
     TimeRecorder scoped_timer1(*histograms_.sendPreparePartialToSelf);
     sendPartialProof(seqNumInfo);
   }
+}
+PrePrepareMsg *ReplicaImp::getConsensusPPFromDataPP(PrePrepareMsg *pp) {
+  if (pp == nullptr) return pp;
+  // set flag for data pp msg
+  // return another pp message with consensus only flag
+  PrePrepareMsg *consensus_only_pp = pp->createConsensusPPMsg(pp);
+  // store it in the map
+  auto digest = consensus_only_pp->digestOfRequests().toString();
+  auto dataPP = pp->cloneDataPPMsg(pp);
+  // TODO(NK): need to persist this
+  // TODO(NK): check and remove old data messages on stable seqNum
+  hashToDataPPmap_.emplace(digest, dataPP);
+  return consensus_only_pp;
 }
 
 bool ReplicaImp::isSeqNumToStopAt(SeqNum seq_num) {
@@ -1633,7 +1701,12 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
   if (auto *tick = std::get_if<TickInternalMsg>(&msg)) {
     return ticks_gen_->onInternalTick(*tick);
   }
-
+  if (auto *t = std::get_if<ConsensusOnlyPPMsg>(&msg)) {
+    ConcordAssert(t->prePrepareMsg != nullptr);
+    if (false == tryToSendConsensusPrePrepareMsg(t->prePrepareMsg)) {
+      LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
+    }
+  }
   ConcordAssert(false);
 }
 

@@ -46,6 +46,8 @@ class InternalReplicaApi  // TODO(GG): rename + clean + split to several classes
   virtual SeqNum getLastExecutedSeqNum() const = 0;
   virtual std::pair<PrePrepareMsg*, bool> buildPrePrepareMessage() { return std::make_pair(nullptr, false); }
   virtual bool tryToSendPrePrepareMsg(bool batchingLogic) { return false; }
+  virtual bool tryToSendDataPrePrepareMsg() { return false; }
+  virtual bool tryToSendConsensusPrePrepareMsg(PrePrepareMsg*) { return false; }
   virtual std::pair<PrePrepareMsg*, bool> buildPrePrepareMsgBatchByRequestsNum(uint32_t requiredRequestsNum) {
     return std::make_pair(nullptr, false);
   }

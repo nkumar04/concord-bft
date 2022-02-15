@@ -232,6 +232,9 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
 
   std::unordered_map<uint8_t, std::map<ReplicaId, std::unique_ptr<ReplicaRestartReadyMsg>>> restart_ready_msgs_;
 
+  // digest to data-only preprepare msg map
+  std::unordered_map<std::string, std::shared_ptr<PrePrepareMsg>> hashToDataPPmap_;
+
   //******** METRICS ************************************
   GaugeHandle metric_view_;
   GaugeHandle metric_last_stable_seq_num_;
@@ -369,6 +372,8 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   SeqNum getLastExecutedSeqNum() const override { return lastExecutedSeqNum; }
   std::pair<PrePrepareMsg*, bool> buildPrePrepareMessage() override;
   bool tryToSendPrePrepareMsg(bool batchingLogic = false) override;
+  bool tryToSendDataPrePrepareMsg() override;
+  bool tryToSendConsensusPrePrepareMsg(PrePrepareMsg* pp) override;
   std::pair<PrePrepareMsg*, bool> buildPrePrepareMsgBatchByRequestsNum(uint32_t requiredRequestsNum) override;
   std::pair<PrePrepareMsg*, bool> buildPrePrepareMsgBatchByOverallSize(uint32_t requiredBatchSizeInBytes) override;
   void handleDeferredRequests();
@@ -400,6 +405,7 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   void tryToStartOrFinishExecution(bool requestMissingInfo = false);
   void startExecution(SeqNum seqNumber, concordUtils::SpanWrapper& parent_span, bool requestMissingInfo);
   void pushDeferredMessage(MessageBase*);
+  PrePrepareMsg* getConsensusPPFromDataPP(PrePrepareMsg* pp);
 
  protected:
   ReplicaImp(bool firstTime,
@@ -467,7 +473,7 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
                                        bool ignorePreviousAcks = false);
   void sendAckIfNeeded(MessageBase* msg, const NodeIdType sourceNode, const SeqNum seqNum);
 
-  bool checkSendPrePrepareMsgPrerequisites();
+  bool checkSendPrePrepareMsgPrerequisites(bool ignore_empty_que = false);
 
   void sendPartialProof(SeqNumInfo&);
 

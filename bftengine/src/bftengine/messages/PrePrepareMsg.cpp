@@ -85,6 +85,8 @@ void PrePrepareMsg::calculateDigestOfRequests(Digest& digest) const {
 void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
   ConcordAssert(senderId() != repInfo.myId());
 
+  // TODO: add validation for data & consensus pp msg
+
   if (size() < sizeof(Header) + spanContextSize() ||  // header size
       !repInfo.isIdOfReplica(senderId()) || b()->epochNum != EpochManager::instance().getSelfEpochNumber())  // sender
     throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": basic"));
@@ -96,8 +98,10 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
   const bool isNull = ((flags & 0x1) == 0);
   const bool isReady = (((flags >> 1) & 0x1) == 1);
   const uint16_t firstPath_ = ((flags >> 2) & 0x3);
-  const uint16_t reservedBits = (flags >> 4);
-
+  const bool isConsensusPP = (((flags >> 4) & 0x01) == 0x01);
+  const bool isDataPP = (((flags >> 4) & 0x10) == 0x10);
+  const uint16_t reservedBits = (flags >> 6);
+  (void)isDataPP;
   if (b()->seqNum == 0 || isNull ||  // we don't send null requests
       !isReady ||                    // not ready
       firstPath_ >= 3 ||             // invalid first path
@@ -109,7 +113,9 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
 
   Digest d;
   calculateDigestOfRequests(d);
-  if (d != b()->digestOfRequests) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": digest"));
+  if (d != b()->digestOfRequests) {
+    if (!isConsensusPP) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": digest"));
+  }
 
   if (SigManager::instance()->isClientTransactionSigningEnabled()) {
     auto it = RequestsIterator(this);
@@ -359,6 +365,26 @@ void PrePrepareMsg::setCid(SeqNum s) {
   } else {
     memcpy(this->body() + this->payloadShift() - b()->batchCidLength + 1, cidStr.data(), b()->batchCidLength - 1);
   }
+}
+
+PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp) {
+  if (pp == nullptr) return pp;
+  auto newPP = new PrePrepareMsg(pp->senderId(),
+                                 pp->viewNumber(),
+                                 pp->seqNumber(),
+                                 pp->firstPath(),
+                                 concordUtils::SpanContext{},
+                                 0 /*TODO: set TimeServiceMsgSize */);
+  newPP->setNumberOfRequests(pp->numberOfRequests());
+  newPP->setDigestOfRequests(pp->digestOfRequests());
+  newPP->setConsensusOnlyFlag();
+  return newPP;
+}
+std::shared_ptr<PrePrepareMsg> PrePrepareMsg::cloneDataPPMsg(PrePrepareMsg* pp) {
+  auto clone_obj = std::shared_ptr<PrePrepareMsg>(nullptr);
+  PrePrepareMsg* cone_pp = (PrePrepareMsg*)pp->cloneObjAndMsg();
+  clone_obj.reset(cone_pp);
+  return clone_obj;
 }
 
 }  // namespace impl

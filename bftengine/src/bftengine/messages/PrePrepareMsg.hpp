@@ -46,6 +46,7 @@ class PrePrepareMsg : public MessageBase {
     // bit 1: 0=not ready , 1=ready
     // bits 2-3: represent the first commit path that should be tried (00 = OPTIMISTIC_FAST, 01 = FAST_WITH_THRESHOLD,
     // 10 = SLOW) bits 4-15: zero
+    // bits 4-5: represents (00 = LegacyConsensusPP, 01 = ConsensusPPDataHashOnly, 10 = DataPPMsg )
   };
 #pragma pack(pop)
   static_assert(sizeof(Header) == (6 + 8 + 8 + 8 + 2 + DIGEST_SIZE + 2 + 4 + 8), "Header is 78B");
@@ -80,6 +81,9 @@ class PrePrepareMsg : public MessageBase {
                 const std::string& batchCid,
                 size_t size);
 
+  PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp);
+  std::shared_ptr<PrePrepareMsg> cloneDataPPMsg(PrePrepareMsg* pp);
+
   BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(PrePrepareMsg)
 
   uint32_t remainingSizeForRequests() const;
@@ -106,14 +110,19 @@ class PrePrepareMsg : public MessageBase {
   bool isNull() const { return ((b()->flags & 0x1) == 0); }
 
   Digest& digestOfRequests() const { return b()->digestOfRequests; }
+  void setDigestOfRequests(const Digest& d) { b()->digestOfRequests = d; }
 
   uint16_t numberOfRequests() const { return b()->numberOfRequests; }
+  void setNumberOfRequests(uint16_t n) { b()->numberOfRequests = n; }
 
   // update view and first path
 
   void updateView(ViewNum v, CommitPath firstPath = CommitPath::SLOW);
   const std::string getClientCorrelationIdForMsg(int index) const;
   const std::string getBatchCorrelationIdAsString() const;
+
+  void setDataPPFlag() { b()->flags |= 32; }
+  void setConsensusOnlyFlag() { b()->flags |= 16; }
 
  protected:
   static int16_t computeFlagsForPrePrepareMsg(bool isNull, bool isReady, CommitPath firstPath);

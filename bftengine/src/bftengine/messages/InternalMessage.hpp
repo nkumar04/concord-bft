@@ -24,6 +24,7 @@
 #include "messages/PrePrepareCarrierInternalMsg.hpp"
 #include "messages/ValidatedMessageCarrierInternalMsg.hpp"
 #include "messages/FinishPrePrepareExecutionInternalMsg.hpp"
+#include "messages/ConsensusOnlyPPMsg.hpp"
 #include "IRequestHandler.hpp"
 
 namespace bftEngine::impl {
@@ -85,6 +86,8 @@ using InternalMessage = std::variant<FullCommitProofMsg*,
                                      // post execution defer related
                                      OnStateTransferCompleteMsg,
 
-                                     FinishPrePrepareExecutionInternalMsg>;
+                                     FinishPrePrepareExecutionInternalMsg,
+
+                                     ConsensusOnlyPPMsg>;
 
 }  // namespace bftEngine::impl

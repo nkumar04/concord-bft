@@ -114,6 +114,11 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
         LOG_WARN(GL, "Received a Tick, but the cron table registry is not initialized");
         req.outExecutionStatus = static_cast<uint32_t>(OperationResult::INTERNAL_ERROR);
       }
+    } else if (req.flags & MsgFlag::CONSENSUS_PP_FLAG) {
+      // TODO(NK): commit request code
+      req.outExecutionStatus = static_cast<uint32_t>(OperationResult::SUCCESS);
+      req.outReply[0] = '1';
+      req.outActualReplySize = 1;
     } else if (req.flags & MsgFlag::DB_CHECKPOINT_FLAG) {
       concord::messages::db_checkpoint_msg::CreateDbCheckpoint createDbChkPtMsg;
       concord::messages::db_checkpoint_msg::deserialize(

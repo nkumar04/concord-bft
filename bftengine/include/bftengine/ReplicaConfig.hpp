@@ -120,6 +120,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
   CONFIG_PARAM(adaptiveBatchingMidIncCond, std::string, "0.9", "The mid increase condition");
   CONFIG_PARAM(adaptiveBatchingMinIncCond, std::string, "0.75", "The min increase condition");
   CONFIG_PARAM(adaptiveBatchingDecCond, std::string, "0.5", "The decrease condition");
+  CONFIG_PARAM(threshBatchSizeForDataSeparation, uint64_t, 1048576, "Threshold batch size(1MB) for data separation");
 
   // Crypto system
   // RSA public keys of all replicas. map from replica identifier to a public key
@@ -322,6 +323,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
     serialize(outStream, adaptiveBatchingMidIncCond);
     serialize(outStream, adaptiveBatchingMinIncCond);
     serialize(outStream, adaptiveBatchingDecCond);
+    serialize(outStream, threshBatchSizeForDataSeparation);
 
     serialize(outStream, publicKeysOfReplicas);
     serialize(outStream, publicKeysOfClients);
@@ -414,6 +416,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
     deserialize(inStream, adaptiveBatchingMidIncCond);
     deserialize(inStream, adaptiveBatchingMinIncCond);
     deserialize(inStream, adaptiveBatchingDecCond);
+    deserialize(inStream, threshBatchSizeForDataSeparation);
 
     deserialize(inStream, publicKeysOfReplicas);
     deserialize(inStream, publicKeysOfClients);

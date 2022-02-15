@@ -675,6 +675,11 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
   if (pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) {
     auto new_pp = getConsensusPPFromDataPP(pp);
     if (new_pp) {
+      // add time service req
+      if (config_.timeServiceEnabled) {
+        auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
+        new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
+      }
       InternalMessage im = ConsensusOnlyPPMsg{new_pp};
       // add a client request to it
       auto digestStr = pp->digestOfRequests().toString();
@@ -1207,10 +1212,10 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       // if time is not ok, we do not continue with consensus flow
 
       // store data pp msg in local cache
-      if(pp->isDataPPFlagSet()){
-        auto d = pp->digestOfRequests().toString();
-        if(hashToDataPPmap_.find(d) == hashToDataPPmap_.end()){
-          hashToDataPPmap_[d] = pp->cloneDataPPMsg(pp);
+      if (msg->isDataPPFlagSet()) {
+        auto d = msg->digestOfRequests().toString();
+        if (hashToDataPPmap_.find(d) == hashToDataPPmap_.end()) {
+          hashToDataPPmap_[d] = msg->cloneDataPPMsg(msg);
         }
       }
     }
@@ -3530,11 +3535,11 @@ void ReplicaImp::onSeqNumIsStable(SeqNum newStableSeqNum, bool hasStateInformati
     checkpointsLog->advanceActiveWindow(lastStableSeqNum);
   }
 
-  //remove data pp messages that are older
-  while(!hashToDataPPmap_.empty()){
+  // remove data pp messages that are older
+  while (!hashToDataPPmap_.empty()) {
     auto it = hashToDataPPmap_.begin();
-    if(it->second->sequenceNumber() >= (lastStableSeqNum - kWorkWindowSize){
-       break;
+    if (it->second->seqNumber() >= (lastStableSeqNum - 2*kWorkWindowSize)) {
+      break;
     }
     hashToDataPPmap_.erase(it);
   }

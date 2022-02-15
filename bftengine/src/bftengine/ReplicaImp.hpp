@@ -405,7 +405,6 @@ class ReplicaImp : public InternalReplicaApi, public ReplicaForStateTransfer {
   void tryToStartOrFinishExecution(bool requestMissingInfo = false);
   void startExecution(SeqNum seqNumber, concordUtils::SpanWrapper& parent_span, bool requestMissingInfo);
   void pushDeferredMessage(MessageBase*);
-  PrePrepareMsg* getConsensusPPFromDataPP(PrePrepareMsg* pp);
 
  protected:
   ReplicaImp(bool firstTime,

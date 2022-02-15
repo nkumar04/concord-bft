@@ -1004,14 +1004,6 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
     sendPartialProof(seqNumInfo);
   }
 }
-PrePrepareMsg *ReplicaImp::getConsensusPPFromDataPP(PrePrepareMsg *pp) {
-  if (pp == nullptr) return pp;
-  // set flag for data pp msg
-  // return another pp message with consensus only flag
-  PrePrepareMsg *consensus_only_pp = pp->createConsensusPPMsg(pp);
-
-  return consensus_only_pp;
-}
 
 bool ReplicaImp::isSeqNumToStopAt(SeqNum seq_num) {
   if (ControlStateManager::instance().getPruningProcessStatus()) return true;
@@ -1145,7 +1137,6 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
   }
   // in-case batch pp message was prepared async
   if (msg->requestsSize() >= config_.threshBatchSizeForDataSeparation) {
-    // auto new_pp = getConsensusPPFromDataPP(msg);
     msg->setDataPPFlag();
     auto dataPP = msg->cloneDataPPMsg(msg);
     auto digest = msg->digestOfRequests().toString();
@@ -1751,7 +1742,7 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
   if (auto *t = std::get_if<ConsensusOnlyPPMsg>(&msg)) {
     if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
       PrePrepareMsg *dPP = it->second;
-      auto new_pp = getConsensusPPFromDataPP(dPP);
+      auto new_pp = dPP->createConsensusPPMsg(dPP);
       if (new_pp) {
         // add time service req
         if (config_.timeServiceEnabled) {

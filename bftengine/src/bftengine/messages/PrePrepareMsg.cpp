@@ -107,24 +107,25 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
       firstPath_ >= 3 ||             // invalid first path
       ((firstPath() == CommitPath::FAST_WITH_THRESHOLD) && (repInfo.cVal() == 0)) || reservedBits != 0 ||
       b()->endLocationOfLastRequest > size() || b()->numberOfRequests == 0 ||
-      b()->numberOfRequests >= b()->endLocationOfLastRequest || !checkRequests()) {
+      (!isConsensusPP && b()->numberOfRequests >= b()->endLocationOfLastRequest) || !checkRequests()) {
     throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced"));
   }
+  if (!isConsensusPP) {
+    Digest d;
+    calculateDigestOfRequests(d);
+    if (d != b()->digestOfRequests) {
+      throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": digest"));
+    }
 
-  Digest d;
-  calculateDigestOfRequests(d);
-  if (d != b()->digestOfRequests) {
-    if (!isConsensusPP) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": digest"));
-  }
-
-  if (SigManager::instance()->isClientTransactionSigningEnabled()) {
-    auto it = RequestsIterator(this);
-    char* requestBody = nullptr;
-    // Here we validate each of the client requests arriving encapsulated inside the pre-prepare message
-    // This might also include validating the request's client signature
-    while (it.getAndGoToNext(requestBody)) {
-      ClientRequestMsg req((ClientRequestMsgHeader*)requestBody);
-      req.validate(repInfo);
+    if (SigManager::instance()->isClientTransactionSigningEnabled()) {
+      auto it = RequestsIterator(this);
+      char* requestBody = nullptr;
+      // Here we validate each of the client requests arriving encapsulated inside the pre-prepare message
+      // This might also include validating the request's client signature
+      while (it.getAndGoToNext(requestBody)) {
+        ClientRequestMsg req((ClientRequestMsgHeader*)requestBody);
+        req.validate(repInfo);
+      }
     }
   }
 }
@@ -377,6 +378,7 @@ PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp) {
                                  0 /*TODO: set TimeServiceMsgSize */);
   newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
+  newPP->b()->flags = pp->b()->flags;
   newPP->setConsensusOnlyFlag();
   return newPP;
 }

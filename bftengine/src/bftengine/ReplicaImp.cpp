@@ -487,7 +487,8 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
         requestsQueueOfPrimary.push(m);
         primaryCombinedReqSize += m->size();
         primary_queue_size_.Get().Set(requestsQueueOfPrimary.size());
-        tryToSendPrePrepareMsg(true);
+        tryToSendDataPrePrepareMsg();
+        tryToSendPrePrepareMsg(false);
         return;
       } else {
         LOG_INFO(CNSUS,
@@ -689,8 +690,10 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
       startConsensusProcess(pp);
       return true;
     }
+  } else {
+    startConsensusProcess(pp);
+    return true;
   }
-
   return false;
 }
 bool ReplicaImp::tryToSendConsensusPrePrepareMsg(PrePrepareMsg *pp) {
@@ -1115,6 +1118,14 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
              "etc...)");
     return;
   }
+  // store data pp msg in local cache
+  if (msg->isDataPPFlagSet()) {
+    auto d = msg->digestOfRequests().toString();
+    if (hashToDataPPmap_.find(d) == hashToDataPPmap_.end()) {
+      hashToDataPPmap_[d] = msg->cloneDataPPMsg(msg);
+    }
+    return;
+  }
 
   if (!getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
     if (!validatePreProcessedResults(msg, getCurrentView())) {
@@ -1174,12 +1185,14 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
         tempConsensusPP = msg;
         msg = it->second;
-        msg->resetConsensusOnlyFlag();
+        msg->resetConsensusOnlyFlag();  // now its a legacy PP
         hashToDataPPmap_.erase(it);
         delete tempConsensusPP;
         tempConsensusPP = nullptr;
       } else {
         // RFMI
+        delete msg;
+        return;
       }
     }
     // For MDC it doesn't matter which type of fast path
@@ -1219,14 +1232,6 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
         sendPreparePartial(seqNumInfo);
       }
       // if time is not ok, we do not continue with consensus flow
-
-      // store data pp msg in local cache
-      if (msg->isDataPPFlagSet()) {
-        auto d = msg->digestOfRequests().toString();
-        if (hashToDataPPmap_.find(d) == hashToDataPPmap_.end()) {
-          hashToDataPPmap_[d] = msg->cloneDataPPMsg(msg);
-        }
-      }
     }
   }
 

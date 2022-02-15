@@ -1205,6 +1205,14 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
         sendPreparePartial(seqNumInfo);
       }
       // if time is not ok, we do not continue with consensus flow
+
+      // store data pp msg in local cache
+      if(pp->isDataPPFlagSet()){
+        auto d = pp->digestOfRequests().toString();
+        if(hashToDataPPmap_.find(d) == hashToDataPPmap_.end()){
+          hashToDataPPmap_[d] = pp->cloneDataPPMsg(pp);
+        }
+      }
     }
   }
 
@@ -3520,6 +3528,15 @@ void ReplicaImp::onSeqNumIsStable(SeqNum newStableSeqNum, bool hasStateInformati
     // If for some reason the previous checkpoint is not in the log, we advance the log to the current stable
     // checkpoint.
     checkpointsLog->advanceActiveWindow(lastStableSeqNum);
+  }
+
+  //remove data pp messages that are older
+  while(!hashToDataPPmap_.empty()){
+    auto it = hashToDataPPmap_.begin();
+    if(it->second->sequenceNumber() >= (lastStableSeqNum - kWorkWindowSize){
+       break;
+    }
+    hashToDataPPmap_.erase(it);
   }
 
   if (hasStateInformation) {

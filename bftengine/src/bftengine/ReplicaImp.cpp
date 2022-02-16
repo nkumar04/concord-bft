@@ -943,9 +943,6 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   }
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
   if (isCreatedEarlier) {
-    controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
-    pp->setSeqNumber(primaryLastUsedSeqNum);
-    pp->setCid(primaryLastUsedSeqNum);
     // in-case batch pp message was prepared async
     if ((pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) && pp->isLegacyPPMsg() && isCurrentPrimary()) {
       pp->setDataPPFlag();
@@ -961,12 +958,12 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       return;
     }
   }
-
+  controller->onSendingPrePrepare(pp->seqNumber(), firstPath);
   LOG_INFO(CNSUS,
            "startConsensusProcess" << KVLOG(
                pp->size(), pp->isDataPPFlagSet(), pp->isConsensusPPFlagSet(), pp->isLegacyPPMsg()));
-  metric_primary_last_used_seq_num_.Get().Set(primaryLastUsedSeqNum);
-  SCOPED_MDC_SEQ_NUM(std::to_string(primaryLastUsedSeqNum));
+  metric_primary_last_used_seq_num_.Get().Set(pp->seqNumber());
+  SCOPED_MDC_SEQ_NUM(std::to_string(pp->seqNumber()));
   if (getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
     SCOPED_MDC("pp_msg_cid", pp->getCid());
   }
@@ -976,9 +973,9 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
            "Sending PrePrepare message" << KVLOG(pp->numberOfRequests())
                                         << " correlation ids: " << pp->getBatchCorrelationIdAsString());
 
-  consensus_times_.start(primaryLastUsedSeqNum);
+  consensus_times_.start(pp->seqNumber());
 
-  SeqNumInfo &seqNumInfo = mainLog->get(primaryLastUsedSeqNum);
+  SeqNumInfo &seqNumInfo = mainLog->get(pp->seqNumber());
   {
     TimeRecorder scoped_timer1(*histograms_.addSelfMsgPrePrepare);
     if (pp->isConsensusPPFlagSet() && isCurrentPrimary()) {
@@ -1000,9 +997,9 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   if (ps_) {
     TimeRecorder scoped_timer1(*histograms_.prePrepareWriteTransaction);
     ps_->beginWriteTran();
-    ps_->setPrimaryLastUsedSeqNum(primaryLastUsedSeqNum);
-    ps_->setPrePrepareMsgInSeqNumWindow(primaryLastUsedSeqNum, pp);
-    if (firstPath == CommitPath::SLOW) ps_->setSlowStartedInSeqNumWindow(primaryLastUsedSeqNum, true);
+    ps_->setPrimaryLastUsedSeqNum(pp->seqNumber());
+    ps_->setPrePrepareMsgInSeqNumWindow(pp->seqNumber(), pp);
+    if (firstPath == CommitPath::SLOW) ps_->setSlowStartedInSeqNumWindow(pp->seqNumber(), true);
     ps_->endWriteTran(config_.getsyncOnUpdateOfMetadata());
   }
 
@@ -1012,7 +1009,7 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       sendToAllOtherReplicas(pp);
     } else {
       for (ReplicaId x : repsInfo->idsOfPeerReplicas()) {
-        sendRetransmittableMsgToReplica(pp, x, primaryLastUsedSeqNum);
+        sendRetransmittableMsgToReplica(pp, x, pp->seqNumber());
       }
     }
   }
@@ -1762,9 +1759,10 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
     if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
       PrePrepareMsg *dPP = it->second;
       auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
-      ++primaryLastUsedSeqNum;
+      
       auto new_pp = dPP->createConsensusPPMsg(
-          dPP, primaryLastUsedSeqNum, getCurrentView(), config_.getreplicaId(), timeServiceMsg->size());
+          dPP, primaryLastUsedSeqNum + 1, getCurrentView(), config_.getreplicaId(), timeServiceMsg->size());
+      
       if (new_pp) {
         // add time service req
         new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
@@ -1773,7 +1771,8 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
         if (false == tryToSendConsensusPrePrepareMsg(new_pp))
           LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
         else
-          hashToDataPPmap_.erase(it);
+         { ++primaryLastUsedSeqNum;}
+        
       }
     }
 

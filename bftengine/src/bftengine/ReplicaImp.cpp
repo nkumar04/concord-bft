@@ -675,7 +675,10 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
     time_to_collect_batch_ = MinTime;
   }
 
-  if (!pp) return isSent;
+  if (!pp){ 
+    LOG_INFO(CNSUS, "PP msg is not ready yet");
+    return isSent;
+  }
   // check for data separation
   if (pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) {
     pp->setDataPPFlag();
@@ -944,6 +947,20 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
     pp->setSeqNumber(primaryLastUsedSeqNum);
     pp->setCid(primaryLastUsedSeqNum);
+    // in-case batch pp message was prepared async
+    if ((pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) && pp->isLegacyPPMsg() && isCurrentPrimary()) {
+      pp->setDataPPFlag();
+      auto dataPP = pp->cloneDataPPMsg(pp);
+      auto digest = pp->digestOfRequests().toString();
+      hashToDataPPmap_.emplace(digest, dataPP);
+
+      InternalMessage im = ConsensusOnlyPPMsg{""};
+      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+      // Start data pp msg for consensus - no pre-check reqd
+      LOG_INFO(CNSUS, "send data PP message for : " << KVLOG(pp->seqNumber(), pp->isDataPPFlagSet()));
+      sendToAllOtherReplicas(pp);
+      return;
+    }
   }
   metric_primary_last_used_seq_num_.Get().Set(primaryLastUsedSeqNum);
   SCOPED_MDC_SEQ_NUM(std::to_string(primaryLastUsedSeqNum));
@@ -1127,6 +1144,7 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       return;
     }
   }
+  LOG_INFO(CNSUS, "Received PrePrepareMsg" << KVLOG(msg->senderId(), msg->size(), msg->isDataPPFlagSet(), msg->isConsensusPPFlagSet(), msg->isLegacyPPMsg()));
   // store data pp msg in local cache
   if (msg->isDataPPFlagSet()) {
     auto d = msg->digestOfRequests().toString();
@@ -1135,20 +1153,6 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       countDataPP_++;
       LOG_INFO(CNSUS, "received data PP message for : " << KVLOG(msg->seqNumber(), countDataPP_));
     }
-    return;
-  }
-  // in-case batch pp message was prepared async
-  if ((msg->requestsSize() >= config_.threshBatchSizeForDataSeparation) && msg->isLegacyPPMsg() && isCurrentPrimary()) {
-    msg->setDataPPFlag();
-    auto dataPP = msg->cloneDataPPMsg(msg);
-    auto digest = msg->digestOfRequests().toString();
-    hashToDataPPmap_.emplace(digest, dataPP);
-
-    InternalMessage im = ConsensusOnlyPPMsg{""};
-    getIncomingMsgsStorage().pushInternalMsg(std::move(im));
-    // Start data pp msg for consensus - no pre-check reqd
-    LOG_INFO(CNSUS, "received data PP message for : " << KVLOG(msg->seqNumber(), msg->isDataPPFlagSet()));
-    sendToAllOtherReplicas(msg);
     return;
   }
 

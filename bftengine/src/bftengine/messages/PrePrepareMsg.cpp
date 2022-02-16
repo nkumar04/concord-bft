@@ -212,8 +212,7 @@ void PrePrepareMsg::finishAddingRequests() {
   ConcordAssert(!isReady());
   ConcordAssert(b()->numberOfRequests > 0);
   ConcordAssert(b()->endLocationOfLastRequest > payloadShift());
-  if(!isConsensusPP)
-    ConcordAssert(b()->digestOfRequests.isZero());
+  if (!isConsensusPP) ConcordAssert(b()->digestOfRequests.isZero());
 
   // check requests (for debug - consider to remove)
   ConcordAssert(checkRequests());
@@ -223,7 +222,7 @@ void PrePrepareMsg::finishAddingRequests() {
   ConcordAssert(isReady());
 
   try {
-    if(!isConsensusPP) calculateDigestOfRequests(b()->digestOfRequests);
+    if (!isConsensusPP) calculateDigestOfRequests(b()->digestOfRequests);
   } catch (std::runtime_error& ex) {
     ConcordAssert(false);
   }
@@ -262,7 +261,7 @@ int16_t PrePrepareMsg::computeFlagsForPrePrepareMsg(bool isNull, bool isReady, C
 
 bool PrePrepareMsg::checkRequests() const {
   const bool isConsensusPP = (((b()->flags >> 4) & 0x01) == 0x01);
-  if(isConsensusPP) return true;
+  if (isConsensusPP) return true;
 
   uint16_t remainReqs = b()->numberOfRequests;
 
@@ -384,7 +383,7 @@ PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp, size_t siz
   newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
   newPP->b()->flags = pp->b()->flags;
-  newPP->b()->flags &= ~(1 << 1); //mark not ready
+  newPP->b()->flags &= ~(1 << 1);  // mark not ready
   newPP->setConsensusOnlyFlag();
   return newPP;
 }

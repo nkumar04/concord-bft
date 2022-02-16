@@ -325,6 +325,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
     serialize(outStream, adaptiveBatchingMinIncCond);
     serialize(outStream, adaptiveBatchingDecCond);
     serialize(outStream, threshBatchSizeForDataSeparation);
+    serialize(outStream, ppDataSeparationEnabled);
 
     serialize(outStream, publicKeysOfReplicas);
     serialize(outStream, publicKeysOfClients);
@@ -418,6 +419,7 @@ class ReplicaConfig : public concord::serialize::SerializableFactory<ReplicaConf
     deserialize(inStream, adaptiveBatchingMinIncCond);
     deserialize(inStream, adaptiveBatchingDecCond);
     deserialize(inStream, threshBatchSizeForDataSeparation);
+    deserialize(inStream, ppDataSeparationEnabled);
 
     deserialize(inStream, publicKeysOfReplicas);
     deserialize(inStream, publicKeysOfClients);
@@ -556,8 +558,11 @@ inline std::ostream& operator<<(std::ostream& os, const ReplicaConfig& rc) {
               rc.adaptivePruningIntervalDuration.count(),
               rc.adaptivePruningIntervalPeriod);
   os << ",";
-  os << KVLOG(
-      rc.dbSnapshotIntervalSeconds.count(), rc.dbCheckpointMonitorIntervalSeconds.count(), rc.enableMultiplexChannel);
+  os << KVLOG(rc.dbSnapshotIntervalSeconds.count(),
+              rc.dbCheckpointMonitorIntervalSeconds.count(),
+              rc.enableMultiplexChannel,
+              rc.ppDataSeparationEnabled,
+              rc.threshBatchSizeForDataSeparation);
   for (auto& [param, value] : rc.config_params_) os << param << ": " << value << "\n";
   return os;
 }

@@ -124,7 +124,7 @@ class PrePrepareMsg : public MessageBase {
   void setDataPPFlag() { b()->flags |= 32; }
   bool isDataPPFlagSet() const {
     const uint16_t flags = b()->flags;
-    return (((flags >> 4) & 0x10) == 0x10);
+    return (((flags >> 4) & 0x2) == 0x2);
   }
   void setConsensusOnlyFlag() { b()->flags |= 16; }
   void resetConsensusOnlyFlag() {
@@ -133,7 +133,7 @@ class PrePrepareMsg : public MessageBase {
   }
   bool isConsensusPPFlagSet() const {
     const uint16_t flags = b()->flags;
-    return (((flags >> 4) & 0x01) == 0x01);
+    return (((flags >> 4) & 0x1) == 0x1);
   }
   bool isLegacyPPMsg() const {
     const uint16_t flags = b()->flags;

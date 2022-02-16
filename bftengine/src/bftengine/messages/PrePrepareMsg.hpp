@@ -81,7 +81,7 @@ class PrePrepareMsg : public MessageBase {
                 const std::string& batchCid,
                 size_t size);
 
-  PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp, size_t size);
+  PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender_id, size_t size);
   PrePrepareMsg* cloneDataPPMsg(PrePrepareMsg* pp);
 
   BFTENGINE_GEN_CONSTRUCT_FROM_BASE_MESSAGE(PrePrepareMsg)
@@ -97,6 +97,7 @@ class PrePrepareMsg : public MessageBase {
   // getter methods
 
   ViewNum viewNumber() const { return b()->viewNum; }
+  void setViewNumber(ViewNum v) { b()->viewNum = v; }
 
   SeqNum seqNumber() const { return b()->seqNum; }
   void setSeqNumber(SeqNum s) { b()->seqNum = s; }

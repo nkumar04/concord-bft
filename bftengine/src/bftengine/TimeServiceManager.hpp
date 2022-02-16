@@ -96,7 +96,7 @@ class TimeServiceManager {
   }
 
   [[nodiscard]] bool hasTimeRequest(const impl::PrePrepareMsg& msg) const {
-    if (msg.numberOfRequests() < 2) {
+    if (!msg.isConsensusPPFlagSet() && msg.numberOfRequests() < 2) {
       LOG_WARN(TS_MNGR, "PrePrepare with Time Service on, cannot have less than 2 messages");
       ill_formed_preprepare_++;
       metrics_component_.UpdateAggregator();

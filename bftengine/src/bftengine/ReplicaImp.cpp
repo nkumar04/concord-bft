@@ -675,7 +675,7 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
     time_to_collect_batch_ = MinTime;
   }
 
-  if (!pp){ 
+  if (!pp) {
     LOG_INFO(CNSUS, "PP msg is not ready yet");
     return isSent;
   }
@@ -702,7 +702,7 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
 }
 
 bool ReplicaImp::tryToSendConsensusPrePrepareMsg(PrePrepareMsg *pp) {
-  if (!checkSendPrePrepareMsgPrerequisites(true)) {
+  if (checkSendPrePrepareMsgPrerequisites(true)) {
     startConsensusProcess(pp);
     return true;
   }
@@ -942,7 +942,6 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
     DebugStatistics::onSendPrePrepareMessage(pp->numberOfRequests(), requestsQueueOfPrimary.size());
   }
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
-  primaryLastUsedSeqNum++;
   if (isCreatedEarlier) {
     controller->onSendingPrePrepare(primaryLastUsedSeqNum, firstPath);
     pp->setSeqNumber(primaryLastUsedSeqNum);
@@ -962,7 +961,10 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       return;
     }
   }
-  LOG_INFO(CNSUS, "startConsensusProcess" << KVLOG(pp->size(), pp->isDataPPFlagSet(), pp->isConsensusPPFlagSet(), pp->isLegacyPPMsg()));
+
+  LOG_INFO(CNSUS,
+           "startConsensusProcess" << KVLOG(
+               pp->size(), pp->isDataPPFlagSet(), pp->isConsensusPPFlagSet(), pp->isLegacyPPMsg()));
   metric_primary_last_used_seq_num_.Get().Set(primaryLastUsedSeqNum);
   SCOPED_MDC_SEQ_NUM(std::to_string(primaryLastUsedSeqNum));
   if (getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
@@ -979,13 +981,15 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   SeqNumInfo &seqNumInfo = mainLog->get(primaryLastUsedSeqNum);
   {
     TimeRecorder scoped_timer1(*histograms_.addSelfMsgPrePrepare);
-    if (pp->isConsensusPPFlagSet() && isCurrentPrimary() ) {
+    if (pp->isConsensusPPFlagSet() && isCurrentPrimary()) {
       LOG_INFO(CNSUS, "add relavent dataPP msg for primary");
       const auto &dig = pp->digestOfRequests().toString();
       if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
         PrePrepareMsg *ppData = it->second;
+        ppData->setSeqNumber(pp->seqNumber());
         ppData->resetConsensusOnlyFlag();  // now its a legacy PP
         hashToDataPPmap_.erase(it);
+        ppData->setViewNumber(pp->viewNumber());
         seqNumInfo.addSelfMsg(ppData);
       }
     } else {
@@ -1146,7 +1150,10 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       return;
     }
   }
-  LOG_INFO(CNSUS, "Received PrePrepareMsg" << KVLOG(msg->senderId(), msg->size(), msg->isDataPPFlagSet(), msg->isConsensusPPFlagSet(), msg->isLegacyPPMsg()));
+  LOG_INFO(
+      CNSUS,
+      "Received PrePrepareMsg" << KVLOG(
+          msg->senderId(), msg->size(), msg->isDataPPFlagSet(), msg->isConsensusPPFlagSet(), msg->isLegacyPPMsg()));
   // store data pp msg in local cache
   if (msg->isDataPPFlagSet()) {
     auto d = msg->digestOfRequests().toString();
@@ -1207,6 +1214,9 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
       if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
         tempConsensusPP = msg;
         msg = it->second;
+        // update seqnum
+        msg->setSeqNumber(tempConsensusPP->seqNumber());
+        msg->setViewNumber(tempConsensusPP->viewNumber());
         msg->resetConsensusOnlyFlag();  // now its a legacy PP
         hashToDataPPmap_.erase(it);
         delete tempConsensusPP;
@@ -1640,6 +1650,10 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
 
   if (auto *t = std::get_if<FinishPrePrepareExecutionInternalMsg>(&msg)) {
     ConcordAssert(t->prePrepareMsg != nullptr);
+    if (currentPrimary()) {
+      InternalMessage im = ConsensusOnlyPPMsg{""};
+      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+    }
     return finishExecutePrePrepareMsg(t->prePrepareMsg, t->pAccumulatedRequests);
   }
 
@@ -1754,7 +1768,9 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
     if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
       PrePrepareMsg *dPP = it->second;
       auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
-      auto new_pp = dPP->createConsensusPPMsg(dPP, timeServiceMsg->size());
+      ++primaryLastUsedSeqNum;
+      auto new_pp = dPP->createConsensusPPMsg(
+          dPP, primaryLastUsedSeqNum, getCurrentView(), config_.getreplicaId(), timeServiceMsg->size());
       if (new_pp) {
         // add time service req
         new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
@@ -2589,6 +2605,10 @@ void ReplicaImp::startExecution(SeqNum seqNumber,
   if (config_.enablePostExecutionSeparation) {
     tryToStartOrFinishExecution(askForMissingInfoAboutCommittedItems);
   } else {
+    if (currentPrimary()) {
+      InternalMessage im = ConsensusOnlyPPMsg{""};
+      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+    }
     executeNextCommittedRequests(span, askForMissingInfoAboutCommittedItems);
   }
 }

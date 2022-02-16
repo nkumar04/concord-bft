@@ -649,8 +649,7 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMsgBatchByRequestsNu
     return std::make_pair(nullptr, false);
   }
 
-  //if (!checkSendPrePrepareMsgPrerequisites()) return std::make_pair(nullptr, false);
-
+  // if (!checkSendPrePrepareMsgPrerequisites()) return std::make_pair(nullptr, false);
 
   removeDuplicatedRequestsFromRequestsQueue();
   return buildPrePrepareMessageByRequestsNum(requiredRequestsNum);
@@ -753,7 +752,7 @@ PrePrepareMsg *ReplicaImp::createPrePrepareMessage() {
   }
 
   if (!getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
-    //controller->onSendingPrePrepare((primaryLastUsedSeqNum + 1), firstPath);
+    // controller->onSendingPrePrepare((primaryLastUsedSeqNum + 1), firstPath);
   }
 
   if (config_.timeServiceEnabled) {
@@ -951,8 +950,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       auto digest = pp->digestOfRequests().toString();
       hashToDataPPmap_.emplace(digest, dataPP);
       if (isCurrentPrimary()) {
-          InternalMessage im = ConsensusOnlyPPMsg{""};
-          getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+        InternalMessage im = ConsensusOnlyPPMsg{""};
+        getIncomingMsgsStorage().pushInternalMsg(std::move(im));
       }
       // Start data pp msg for consensus - no pre-check reqd
       LOG_INFO(CNSUS, "send data PP message for : " << KVLOG(pp->seqNumber(), pp->isDataPPFlagSet()));
@@ -1759,21 +1758,17 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
   if (auto *t = std::get_if<ConsensusOnlyPPMsg>(&msg)) {
     if (auto it = hashToDataPPmap_.begin(); it != hashToDataPPmap_.end()) {
       PrePrepareMsg *dPP = it->second;
-      auto timeServiceMsg = time_service_manager_->createClientRequestMsg();
-      
+
+      auto timeData = time_service_manager_->getSerializedTime();
       auto new_pp = dPP->createConsensusPPMsg(
-          dPP, primaryLastUsedSeqNum + 1, getCurrentView(), config_.getreplicaId(), timeServiceMsg->size());
-      
+          dPP, primaryLastUsedSeqNum + 1, getCurrentView(), config_.getreplicaId(), 0, timeData);
       if (new_pp) {
-        // add time service req
-        new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
-        new_pp->finishAddingRequests();
         new_pp->setConsensusOnlyFlag();
         if (false == tryToSendConsensusPrePrepareMsg(new_pp))
           LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
-        else
-         { ++primaryLastUsedSeqNum;}
-        
+        else {
+          ++primaryLastUsedSeqNum;
+        }
       }
     }
 

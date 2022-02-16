@@ -686,10 +686,10 @@ bool ReplicaImp::tryToSendDataPrePrepareMsg() {
     auto digest = dataPP->digestOfRequests().toString();
     hashToDataPPmap_.emplace(digest, dataPP);
     // add time service req
-
-    InternalMessage im = ConsensusOnlyPPMsg{""};
-
-    getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+    if (isCurrentPrimary()) {
+      InternalMessage im = ConsensusOnlyPPMsg{""};
+      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+    }
     // Start data pp msg for consensus - no pre-check reqd
     LOG_INFO(CNSUS, "sending dataPP msg" << KVLOG(pp->isDataPPFlagSet()));
     sendToAllOtherReplicas(pp);
@@ -949,9 +949,10 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       auto dataPP = pp->cloneDataPPMsg(pp);
       auto digest = pp->digestOfRequests().toString();
       hashToDataPPmap_.emplace(digest, dataPP);
-
-      InternalMessage im = ConsensusOnlyPPMsg{""};
-      getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+      if (isCurrentPrimary()) {
+          InternalMessage im = ConsensusOnlyPPMsg{""};
+          getIncomingMsgsStorage().pushInternalMsg(std::move(im));
+      }
       // Start data pp msg for consensus - no pre-check reqd
       LOG_INFO(CNSUS, "send data PP message for : " << KVLOG(pp->seqNumber(), pp->isDataPPFlagSet()));
       sendToAllOtherReplicas(pp);
@@ -1647,7 +1648,7 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
 
   if (auto *t = std::get_if<FinishPrePrepareExecutionInternalMsg>(&msg)) {
     ConcordAssert(t->prePrepareMsg != nullptr);
-    if (currentPrimary()) {
+    if (isCurrentPrimary()) {
       InternalMessage im = ConsensusOnlyPPMsg{""};
       getIncomingMsgsStorage().pushInternalMsg(std::move(im));
     }
@@ -2604,7 +2605,7 @@ void ReplicaImp::startExecution(SeqNum seqNumber,
   if (config_.enablePostExecutionSeparation) {
     tryToStartOrFinishExecution(askForMissingInfoAboutCommittedItems);
   } else {
-    if (currentPrimary()) {
+    if (isCurrentPrimary()) {
       InternalMessage im = ConsensusOnlyPPMsg{""};
       getIncomingMsgsStorage().pushInternalMsg(std::move(im));
     }
@@ -5280,7 +5281,7 @@ void ReplicaImp::finishExecutePrePrepareMsg(PrePrepareMsg *ppMsg,
   updateLimitsAndMetrics(ppMsg);
 
   tryToStartOrFinishExecution(false);
-  if (currentPrimary()) {
+  if (isCurrentPrimary()) {
     InternalMessage im = ConsensusOnlyPPMsg{""};
     getIncomingMsgsStorage().pushInternalMsg(std::move(im));
   }

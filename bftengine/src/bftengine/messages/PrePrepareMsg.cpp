@@ -387,10 +387,9 @@ void PrePrepareMsg::setCid(SeqNum s) {
 }
 
 PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(
-    PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender, size_t size) {
+    PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender, size_t size, const std::string& ts) {
   if (pp == nullptr) return pp;
-  auto newPP = new PrePrepareMsg(
-      sender, view, seq, pp->firstPath(), concordUtils::SpanContext{}, size /*TODO: set TimeServiceMsgSize */);
+  auto newPP = new PrePrepareMsg(sender, view, seq, pp->firstPath(), ts, concordUtils::SpanContext{}, size);
   // newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
   // newPP->b()->flags = pp->b()->flags;

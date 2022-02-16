@@ -962,6 +962,7 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       return;
     }
   }
+  LOG_INFO(CNSUS, "startConsensusProcess" << KVLOG(pp->size(), pp->isDataPPFlagSet(), pp->isConsensusPPFlagSet(), pp->isLegacyPPMsg()));
   metric_primary_last_used_seq_num_.Get().Set(primaryLastUsedSeqNum);
   SCOPED_MDC_SEQ_NUM(std::to_string(primaryLastUsedSeqNum));
   if (getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
@@ -978,8 +979,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   SeqNumInfo &seqNumInfo = mainLog->get(primaryLastUsedSeqNum);
   {
     TimeRecorder scoped_timer1(*histograms_.addSelfMsgPrePrepare);
-    if (pp->isConsensusPPFlagSet()) {
-      // add relavent dataPP msg for primary
+    if (pp->isConsensusPPFlagSet() && isCurrentPrimary() ) {
+      LOG_INFO(CNSUS, "add relavent dataPP msg for primary");
       const auto &dig = pp->digestOfRequests().toString();
       if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
         PrePrepareMsg *ppData = it->second;
@@ -1752,6 +1753,7 @@ void ReplicaImp::onInternalMsg(InternalMessage &&msg) {
         // add time service req
         new_pp->addRequest(timeServiceMsg->body(), timeServiceMsg->size());
         new_pp->finishAddingRequests();
+        new_pp->setConsensusOnlyFlag();
         if (false == tryToSendConsensusPrePrepareMsg(new_pp))
           LOG_WARN(CNSUS, "Sending consensus only PrePrepare message failed");
         else

@@ -95,6 +95,12 @@ class TimeServiceManager {
                                                     "TIME_SERVICE");
   }
 
+  // Returns a client request message with timestamp (current system clock time)
+  [[nodiscard]] std::string getSerializedTime() const {
+    const auto now = std::chrono::duration_cast<ConsensusTime>(ClockT::now().time_since_epoch());
+    return concord::util::serialize(now);
+  }
+
   [[nodiscard]] bool hasTimeRequest(const impl::PrePrepareMsg& msg) const {
     if (msg.numberOfRequests() < 2) {
       LOG_WARN(TS_MNGR, "PrePrepare with Time Service on, cannot have less than 2 messages");
@@ -131,6 +137,38 @@ class TimeServiceManager {
     ConcordAssert((msg.flags() & MsgFlag::TIME_SERVICE_FLAG) != 0 &&
                   "TimeServiceManager supports only messages with TIME_SERVICE_FLAG");
     const auto t = concord::util::deserialize<ConsensusTime>(msg.requestBuf(), msg.requestBuf() + msg.requestLength());
+    const auto now = std::chrono::duration_cast<ConsensusTime>(ClockT::now().time_since_epoch());
+
+    const auto& config = ReplicaConfig::instance();
+    auto min = now - config.timeServiceHardLimitMillis;
+    auto max = now + config.timeServiceHardLimitMillis;
+    if (min > t || t > max) {
+      LOG_WARN(TS_MNGR,
+               "Current primary's time reached hard limit, requests will be ignored. Please synchronize local clocks! "
+                   << "Primary's time: " << t.count() << ", local time: " << now.count()
+                   << ", difference: " << (t - now).count() << ", time limits: +/-"
+                   << config.timeServiceHardLimitMillis.count() << ". Time is presented as ms since epoch");
+      hard_limit_reached_counter_++;
+      metrics_component_.UpdateAggregator();
+      return false;
+    }
+
+    min = now - config.timeServiceSoftLimitMillis;
+    max = now + config.timeServiceSoftLimitMillis;
+    if (min > t || t > max) {
+      LOG_WARN(TS_MNGR,
+               "Current primary's time reached soft limit, please synchronize local clocks! "
+                   << "Primary's time: " << t.count() << ", local time: " << now.count()
+                   << ", difference: " << (t - now).count() << ", time limits: +/-"
+                   << config.timeServiceSoftLimitMillis.count() << ". Time is presented as ms since epoch");
+      soft_limit_reached_counter_++;
+      metrics_component_.UpdateAggregator();
+    }
+    return true;
+  }
+
+  [[nodiscard]] bool isPrimarysTimeWithinBounds(const std::string& timeData) const {
+    const auto t = concord::util::deserialize<ConsensusTime>(timeData.data(), timeData.data() + timeData.size());
     const auto now = std::chrono::duration_cast<ConsensusTime>(ClockT::now().time_since_epoch());
 
     const auto& config = ReplicaConfig::instance();

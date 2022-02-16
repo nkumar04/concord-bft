@@ -124,7 +124,7 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
 }
 
 PrePrepareMsg::PrePrepareMsg(ReplicaId sender, ViewNum v, SeqNum s, CommitPath firstPath, size_t size)
-    : PrePrepareMsg(sender, v, s, firstPath, concordUtils::SpanContext{}, size) {}
+    : PrePrepareMsg(sender, v, s, firstPath, "", concordUtils::SpanContext{}, size) {}
 
 // Sequence number provided in the PPM at the time of constructor call might change later
 // This will result into allotment of next available sequence number. As the sequence number
@@ -137,10 +137,11 @@ PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
                              ViewNum v,
                              SeqNum s,
                              CommitPath firstPath,
+                             const std::string& timeData,
                              const concordUtils::SpanContext& spanContext,
                              size_t size)
     : PrePrepareMsg::PrePrepareMsg(
-          sender, v, s, firstPath, spanContext, std::string(1, '0') + std::to_string(s), size) {}
+          sender, v, s, firstPath, spanContext, std::string(1, '0') + std::to_string(s), timeData, size) {}
 
 PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
                              ViewNum v,
@@ -148,12 +149,13 @@ PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
                              CommitPath firstPath,
                              const concordUtils::SpanContext& spanContext,
                              const std::string& batchCid,
+                             const std::string& timeData,
                              size_t size)
     : MessageBase(sender,
                   MsgCode::PrePrepare,
                   spanContext.data().size(),
-                  (((size + sizeof(Header) + batchCid.size()) < maxMessageSize<PrePrepareMsg>())
-                       ? (size + sizeof(Header) + batchCid.size())
+                  (((size + sizeof(Header) + batchCid.size() + timeData.size()) < maxMessageSize<PrePrepareMsg>())
+                       ? (size + sizeof(Header) + batchCid.size() + timeData.size())
                        : maxMessageSize<PrePrepareMsg>() - spanContext.data().size())) {
   bool ready = size == 0;  // if null, then message is ready
   if (!ready) {
@@ -162,6 +164,7 @@ PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
     b()->digestOfRequests = nullDigest;
   }
   b()->batchCidLength = batchCid.size();
+  b()->timeDataLength = timeData.size();
   b()->endLocationOfLastRequest = payloadShift();
   b()->flags = computeFlagsForPrePrepareMsg(ready, ready, firstPath);
   b()->numberOfRequests = 0;
@@ -173,6 +176,8 @@ PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
   memcpy(position, spanContext.data().data(), b()->header.spanContextSize);
   position += spanContext.data().size();
   memcpy(position, batchCid.data(), b()->batchCidLength);
+  position += b()->batchCidLength;
+  memcpy(position, timeData.data(), b()->timeDataLength);
 }
 
 uint32_t PrePrepareMsg::remainingSizeForRequests() const {
@@ -302,7 +307,7 @@ const std::string PrePrepareMsg::getBatchCorrelationIdAsString() const {
 }
 
 uint32_t PrePrepareMsg::payloadShift() const {
-  return sizeof(Header) + b()->batchCidLength + b()->header.spanContextSize;
+  return sizeof(Header) + b()->batchCidLength + b()->header.spanContextSize + b()->timeDataLength;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -349,15 +354,24 @@ bool RequestsIterator::getAndGoToNext(char*& pRequest) {
 }
 
 std::string PrePrepareMsg::getCid() const {
-  return std::string(this->body() + this->payloadShift() - b()->batchCidLength, b()->batchCidLength);
+  return std::string(this->body() + this->payloadShift() - (b()->batchCidLength + b()->timeDataLength),
+                     b()->batchCidLength);
+}
+
+std::string PrePrepareMsg::getTimeData() const {
+  return std::string(this->body() + this->payloadShift() - b()->timeDataLength, b()->timeDataLength);
 }
 
 void PrePrepareMsg::setCid(SeqNum s) {
   std::string cidStr = std::to_string(s);
   if (cidStr.size() >= b()->batchCidLength) {
-    memcpy(this->body() + this->payloadShift() - b()->batchCidLength, cidStr.data(), b()->batchCidLength);
+    memcpy(this->body() + this->payloadShift() - (b()->batchCidLength + b()->timeDataLength),
+           cidStr.data(),
+           b()->batchCidLength);
   } else {
-    memcpy(this->body() + this->payloadShift() - b()->batchCidLength + 1, cidStr.data(), b()->batchCidLength - 1);
+    memcpy(this->body() + this->payloadShift() - (b()->batchCidLength + b()->timeDataLength) + 1,
+           cidStr.data(),
+           b()->batchCidLength - 1);
   }
 }
 

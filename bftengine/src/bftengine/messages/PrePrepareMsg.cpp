@@ -98,13 +98,13 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
   const bool isNull = ((flags & 0x1) == 0);
   const bool isReady = (((flags >> 1) & 0x1) == 1);
   const uint16_t firstPath_ = ((flags >> 2) & 0x3);
-  const bool isConsensusPP = (((flags >> 4) & 0x01) == 0x01);
-  const bool isDataPP = (((flags >> 4) & 0x10) == 0x10);
+  const bool isConsensusPP = (((flags >> 4) & 0x1) == 0x1);
+  const bool isDataPP = (((flags >> 4) & 0x2) == 0x2);
   const uint16_t reservedBits = (flags >> 6);
   (void)isDataPP;
-  if (b()->seqNum == 0 || isNull ||  // we don't send null requests
-      !isReady ||                    // not ready
-      firstPath_ >= 3 ||             // invalid first path
+  if ((!isDataPP && b()->seqNum == 0) || isNull ||  // we don't send null requests
+      !isReady ||                                   // not ready
+      firstPath_ >= 3 ||                            // invalid first path
       ((firstPath() == CommitPath::FAST_WITH_THRESHOLD) && (repInfo.cVal() == 0)) || reservedBits != 0 ||
       b()->endLocationOfLastRequest > size() || b()->numberOfRequests == 0 ||
       (!isConsensusPP && b()->numberOfRequests >= b()->endLocationOfLastRequest) || !checkRequests()) {
@@ -372,19 +372,16 @@ void PrePrepareMsg::setCid(SeqNum s) {
   }
 }
 
-PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp, size_t size) {
+PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(
+    PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender, size_t size) {
   if (pp == nullptr) return pp;
-  auto newPP = new PrePrepareMsg(pp->senderId(),
-                                 pp->viewNumber(),
-                                 pp->seqNumber(),
-                                 pp->firstPath(),
-                                 concordUtils::SpanContext{},
-                                 size /*TODO: set TimeServiceMsgSize */);
-  //newPP->setNumberOfRequests(pp->numberOfRequests());
+  auto newPP = new PrePrepareMsg(
+      sender, view, seq, pp->firstPath(), concordUtils::SpanContext{}, size /*TODO: set TimeServiceMsgSize */);
+  // newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
-  //newPP->b()->flags = pp->b()->flags;
-  //newPP->b()->flags &= ~(1 << 1);  // mark not ready
-  //newPP->b()->flags &= ~(1 << 5);  // reset dataPP flag
+  // newPP->b()->flags = pp->b()->flags;
+  // newPP->b()->flags &= ~(1 << 1);  // mark not ready
+  // newPP->b()->flags &= ~(1 << 5);  // reset dataPP flag
   newPP->setConsensusOnlyFlag();
   return newPP;
 }

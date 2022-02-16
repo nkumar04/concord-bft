@@ -207,7 +207,7 @@ void PrePrepareMsg::addRequest(const char* pRequest, uint32_t requestSize) {
 }
 
 void PrePrepareMsg::finishAddingRequests() {
-  const bool isConsensusPP = (((b()->flags >> 4) & 0x01) == 0x01);
+  const bool isConsensusPP = (((b()->flags >> 4) & 0x1) == 0x1);
   ConcordAssert(!isNull());
   ConcordAssert(!isReady());
   ConcordAssert(b()->numberOfRequests > 0);
@@ -260,7 +260,7 @@ int16_t PrePrepareMsg::computeFlagsForPrePrepareMsg(bool isNull, bool isReady, C
 }
 
 bool PrePrepareMsg::checkRequests() const {
-  const bool isConsensusPP = (((b()->flags >> 4) & 0x01) == 0x01);
+  const bool isConsensusPP = (((b()->flags >> 4) & 0x1) == 0x1);
   if (isConsensusPP) return true;
 
   uint16_t remainReqs = b()->numberOfRequests;
@@ -380,10 +380,11 @@ PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(PrePrepareMsg* pp, size_t siz
                                  pp->firstPath(),
                                  concordUtils::SpanContext{},
                                  size /*TODO: set TimeServiceMsgSize */);
-  newPP->setNumberOfRequests(pp->numberOfRequests());
+  //newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
-  newPP->b()->flags = pp->b()->flags;
-  newPP->b()->flags &= ~(1 << 1);  // mark not ready
+  //newPP->b()->flags = pp->b()->flags;
+  //newPP->b()->flags &= ~(1 << 1);  // mark not ready
+  //newPP->b()->flags &= ~(1 << 5);  // reset dataPP flag
   newPP->setConsensusOnlyFlag();
   return newPP;
 }

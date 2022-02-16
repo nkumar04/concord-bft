@@ -36,6 +36,7 @@ class PrePrepareMsg : public MessageBase {
     EpochNum epochNum;
     uint16_t flags;
     uint64_t batchCidLength;
+    uint32_t timeDataLength;
     Digest digestOfRequests;
 
     uint16_t numberOfRequests;
@@ -49,7 +50,7 @@ class PrePrepareMsg : public MessageBase {
     // bits 4-5: represents (00 = LegacyConsensusPP, 01 = ConsensusPPDataHashOnly, 10 = DataPPMsg )
   };
 #pragma pack(pop)
-  static_assert(sizeof(Header) == (6 + 8 + 8 + 8 + 2 + DIGEST_SIZE + 2 + 4 + 8), "Header is 78B");
+  static_assert(sizeof(Header) == (6 + 8 + 8 + 8 + 2 + 4 + DIGEST_SIZE + 2 + 4 + 8), "Header is 82B");
 
   static const size_t prePrepareHeaderPrefix =
       sizeof(Header) - sizeof(Header::numberOfRequests) - sizeof(Header::endLocationOfLastRequest);
@@ -70,6 +71,7 @@ class PrePrepareMsg : public MessageBase {
                 ViewNum v,
                 SeqNum s,
                 CommitPath firstPath,
+                const std::string& timeData,
                 const concordUtils::SpanContext& spanContext,
                 size_t size);
 
@@ -79,6 +81,7 @@ class PrePrepareMsg : public MessageBase {
                 CommitPath firstPath,
                 const concordUtils::SpanContext& spanContext,
                 const std::string& batchCid,
+                const std::string& timeData,
                 size_t size);
 
   PrePrepareMsg* createConsensusPPMsg(PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender_id, size_t size);
@@ -102,6 +105,7 @@ class PrePrepareMsg : public MessageBase {
   SeqNum seqNumber() const { return b()->seqNum; }
   void setSeqNumber(SeqNum s) { b()->seqNum = s; }
 
+  std::string getTimeData() const;
   std::string getCid() const;
   void setCid(SeqNum s);
 

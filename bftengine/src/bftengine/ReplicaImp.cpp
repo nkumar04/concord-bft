@@ -648,7 +648,9 @@ std::pair<PrePrepareMsg *, bool> ReplicaImp::buildPrePrepareMsgBatchByRequestsNu
                   << KVLOG(requestsQueueOfPrimary.size(), requiredRequestsNum));
     return std::make_pair(nullptr, false);
   }
-  if (!checkSendPrePrepareMsgPrerequisites()) return std::make_pair(nullptr, false);
+
+  //if (!checkSendPrePrepareMsgPrerequisites()) return std::make_pair(nullptr, false);
+
 
   removeDuplicatedRequestsFromRequestsQueue();
   return buildPrePrepareMessageByRequestsNum(requiredRequestsNum);
@@ -751,7 +753,7 @@ PrePrepareMsg *ReplicaImp::createPrePrepareMessage() {
   }
 
   if (!getReplicaConfig().prePrepareFinalizeAsyncEnabled) {
-    controller->onSendingPrePrepare((primaryLastUsedSeqNum + 1), firstPath);
+    //controller->onSendingPrePrepare((primaryLastUsedSeqNum + 1), firstPath);
   }
 
   if (config_.timeServiceEnabled) {

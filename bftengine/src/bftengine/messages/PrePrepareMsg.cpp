@@ -106,8 +106,7 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
       !isReady ||                                   // not ready
       firstPath_ >= 3 ||                            // invalid first path
       ((firstPath() == CommitPath::FAST_WITH_THRESHOLD) && (repInfo.cVal() == 0)) || reservedBits != 0 ||
-      b()->endLocationOfLastRequest > size() || b()->numberOfRequests == 0 ||
-      (!isConsensusPP && b()->numberOfRequests >= b()->endLocationOfLastRequest) || !checkRequests()) {
+      b()->endLocationOfLastRequest > size() || (isDataPP && b()->numberOfRequests == 0) || !checkRequests()) {
     throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced"));
   }
   if (!isConsensusPP) {

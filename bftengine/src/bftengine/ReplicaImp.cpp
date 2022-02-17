@@ -944,7 +944,8 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
   metric_bft_batch_size_.Get().Set(pp->numberOfRequests());
   if (isCreatedEarlier) {
     // in-case batch pp message was prepared async
-    if ((pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) && pp->isLegacyPPMsg() && isCurrentPrimary()) {
+    if ((pp->requestsSize() >= config_.threshBatchSizeForDataSeparation) &&
+        (pp->isDataPPFlagSet() || pp->isLegacyPPMsg()) && isCurrentPrimary()) {
       pp->setDataPPFlag();
       auto dataPP = pp->cloneDataPPMsg(pp);
       auto digest = pp->digestOfRequests().toString();
@@ -985,7 +986,7 @@ void ReplicaImp::startConsensusProcess(PrePrepareMsg *pp, bool isCreatedEarlier)
       if (auto it = hashToDataPPmap_.find(dig); it != hashToDataPPmap_.end()) {
         PrePrepareMsg *ppData = it->second;
         ppData->setSeqNumber(pp->seqNumber());
-        ppData->resetConsensusOnlyFlag();  // now its a legacy PP
+        ppData->setLegacyFlag();  // now its a legacy PP
         hashToDataPPmap_.erase(it);
         ppData->setViewNumber(pp->viewNumber());
         seqNumInfo.addSelfMsg(ppData);
@@ -1214,7 +1215,7 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
         // update seqnum
         msg->setSeqNumber(tempConsensusPP->seqNumber());
         msg->setViewNumber(tempConsensusPP->viewNumber());
-        msg->resetConsensusOnlyFlag();  // now its a legacy PP
+        msg->setLegacyFlag();  // now its a legacy PP
         hashToDataPPmap_.erase(it);
         delete tempConsensusPP;
         tempConsensusPP = nullptr;

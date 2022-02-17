@@ -24,6 +24,8 @@ namespace impl {
 class RequestsIterator;
 
 class PrePrepareMsg : public MessageBase {
+  enum mtype : uint8_t { DATA = 0x1, CONSENSUS = 0x2, LEGACY = 0x3 };
+
  protected:
   template <typename MessageT>
   friend size_t sizeOfHeader();
@@ -35,6 +37,7 @@ class PrePrepareMsg : public MessageBase {
     SeqNum seqNum;
     EpochNum epochNum;
     uint16_t flags;
+    uint8_t mtype;
     uint64_t batchCidLength;
     uint32_t timeDataLength;
     Digest digestOfRequests;
@@ -50,7 +53,7 @@ class PrePrepareMsg : public MessageBase {
     // bits 4-5: represents (00 = LegacyConsensusPP, 01 = ConsensusPPDataHashOnly, 10 = DataPPMsg )
   };
 #pragma pack(pop)
-  static_assert(sizeof(Header) == (6 + 8 + 8 + 8 + 2 + 4 + DIGEST_SIZE + 2 + 4 + 8), "Header is 82B");
+  static_assert(sizeof(Header) == (6 + 8 + 8 + 8 + 2 + 4 + DIGEST_SIZE + 2 + 4 + 8 + 1), "Header is 83B");
 
   static const size_t prePrepareHeaderPrefix =
       sizeof(Header) - sizeof(Header::numberOfRequests) - sizeof(Header::endLocationOfLastRequest);
@@ -127,24 +130,12 @@ class PrePrepareMsg : public MessageBase {
   const std::string getClientCorrelationIdForMsg(int index) const;
   const std::string getBatchCorrelationIdAsString() const;
 
-  void setDataPPFlag() { b()->flags |= 32; }
-  bool isDataPPFlagSet() const {
-    const uint16_t flags = b()->flags;
-    return (((flags >> 4) & 0x2) == 0x2);
-  }
-  void setConsensusOnlyFlag() { b()->flags |= 16; }
-  void resetConsensusOnlyFlag() {
-    b()->flags &= ~(1 << 4);
-    b()->flags &= ~(1 << 5);
-  }
-  bool isConsensusPPFlagSet() const {
-    const uint16_t flags = b()->flags;
-    return (((flags >> 4) & 0x1) == 0x1);
-  }
-  bool isLegacyPPMsg() const {
-    const uint16_t flags = b()->flags;
-    return ((flags >> 4) == 0);
-  }
+  void setDataPPFlag() { b()->mtype = mtype::DATA; }
+  bool isDataPPFlagSet() const { return b()->mtype == mtype::DATA; }
+  void setConsensusOnlyFlag() { b()->mtype = mtype::CONSENSUS; }
+  void setLegacyFlag() { b()->mtype = mtype::LEGACY; }
+  bool isConsensusPPFlagSet() const { return b()->mtype == mtype::CONSENSUS; }
+  bool isLegacyPPMsg() const { return b()->mtype == mtype::LEGACY; }
 
  protected:
   static int16_t computeFlagsForPrePrepareMsg(bool isNull, bool isReady, CommitPath firstPath);

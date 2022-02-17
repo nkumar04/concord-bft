@@ -98,17 +98,23 @@ void PrePrepareMsg::validate(const ReplicasInfo& repInfo) const {
   const bool isNull = ((flags & 0x1) == 0);
   const bool isReady = (((flags >> 1) & 0x1) == 1);
   const uint16_t firstPath_ = ((flags >> 2) & 0x3);
-  const bool isConsensusPP = (((flags >> 4) & 0x1) == 0x1);
-  const bool isDataPP = (((flags >> 4) & 0x2) == 0x2);
+  const bool isConsensusPP = isConsensusPPFlagSet();
+  const bool isDataPP = isDataPPFlagSet();
   const uint16_t reservedBits = (flags >> 6);
   (void)isDataPP;
-  if ((!isDataPP && b()->seqNum == 0) || isNull ||  // we don't send null requests
-      !isReady ||                                   // not ready
-      firstPath_ >= 3 ||                            // invalid first path
-      ((firstPath() == CommitPath::FAST_WITH_THRESHOLD) && (repInfo.cVal() == 0)) || reservedBits != 0 ||
-      b()->endLocationOfLastRequest > size() || (isDataPP && b()->numberOfRequests == 0) || !checkRequests()) {
-    throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced"));
-  }
+  if ((!isDataPP && b()->seqNum == 0)) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 1"));
+  if (isNull && !isConsensusPP)
+    throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 2"));  // we don't send null requests
+  if (!isReady) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 3"));  // not ready
+  if (firstPath_ >= 3)
+    throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 4"));  // invalid first path
+  if ((firstPath() == CommitPath::FAST_WITH_THRESHOLD) && (repInfo.cVal() == 0))
+    throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 5"));
+  if (reservedBits != 0) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 6"));
+  if (b()->endLocationOfLastRequest > size())
+    throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 7"));
+  if (!isConsensusPP && b()->numberOfRequests == 0) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 8"));
+  if (!checkRequests()) throw std::runtime_error(__PRETTY_FUNCTION__ + std::string(": advanced 10"));
   if (!isConsensusPP) {
     Digest d;
     calculateDigestOfRequests(d);
@@ -177,6 +183,7 @@ PrePrepareMsg::PrePrepareMsg(ReplicaId sender,
   b()->seqNum = s;
   b()->epochNum = EpochManager::instance().getSelfEpochNumber();
   b()->viewNum = v;
+  b()->mtype = mtype::DATA;
 
   char* position = body() + sizeof(Header);
   memcpy(position, spanContext.data().data(), b()->header.spanContextSize);
@@ -211,7 +218,7 @@ void PrePrepareMsg::addRequest(const char* pRequest, uint32_t requestSize) {
 }
 
 void PrePrepareMsg::finishAddingRequests() {
-  const bool isConsensusPP = (((b()->flags >> 4) & 0x1) == 0x1);
+  const bool isConsensusPP = isConsensusPPFlagSet();
   ConcordAssert(!isNull());
   ConcordAssert(!isReady());
   ConcordAssert(b()->numberOfRequests > 0);
@@ -264,7 +271,7 @@ int16_t PrePrepareMsg::computeFlagsForPrePrepareMsg(bool isNull, bool isReady, C
 }
 
 bool PrePrepareMsg::checkRequests() const {
-  const bool isConsensusPP = (((b()->flags >> 4) & 0x1) == 0x1);
+  const bool isConsensusPP = isConsensusPPFlagSet();
   if (isConsensusPP) return true;
 
   uint16_t remainReqs = b()->numberOfRequests;
@@ -389,11 +396,7 @@ PrePrepareMsg* PrePrepareMsg::createConsensusPPMsg(
     PrePrepareMsg* pp, uint64_t seq, uint64_t view, uint16_t sender, size_t size, const std::string& ts) {
   if (pp == nullptr) return pp;
   auto newPP = new PrePrepareMsg(sender, view, seq, pp->firstPath(), ts, concordUtils::SpanContext{}, size);
-  // newPP->setNumberOfRequests(pp->numberOfRequests());
   newPP->setDigestOfRequests(pp->digestOfRequests());
-  // newPP->b()->flags = pp->b()->flags;
-  // newPP->b()->flags &= ~(1 << 1);  // mark not ready
-  // newPP->b()->flags &= ~(1 << 5);  // reset dataPP flag
   newPP->setConsensusOnlyFlag();
   return newPP;
 }
